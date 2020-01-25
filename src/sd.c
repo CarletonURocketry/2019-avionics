@@ -225,9 +225,8 @@ uint8_t write_block(uint32_t blockAddr, uint8_t* src)
      */
     uint8_t transactionId;
     uint8_t response = 0xFF;
-    uint16_t sendBufferLength = SD_BLOCKSIZE;
+    uint16_t sendBufferLength = SD_BLOCKSIZE + 1; // +1 for writeBeginByte
     uint16_t responseLength = sizeof(response);
-    uint8_t dummyByte = 0xFF;
     uint8_t writeBeginByte = 0xFE;
 
     // Send CMD24 (the single block write command)
@@ -238,31 +237,14 @@ uint8_t write_block(uint32_t blockAddr, uint8_t* src)
         return 1;
     }
 
-    // Send one dummy byte before sending the data.
-    sercom_spi_start(&spi_g, &transactionId, SD_BAUDRATE, SD_CS_PIN_GROUP,
-                SD_CS_PIN_MASK, &dummyByte, 1, &response,
-                responseLength);
-    while (!sercom_spi_transaction_done(&spi_g, transactionId));
-
     // First byte sent MUST be 0xFE to enable writing of a single block.
-    sercom_spi_start(&spi_g, &transactionId, SD_BAUDRATE, SD_CS_PIN_GROUP,
-                SD_CS_PIN_MASK, &writeBeginByte, 1, &response,
-                responseLength);
-    while (!sercom_spi_transaction_done(&spi_g, transactionId));
+    src[0] = writeBeginByte;
 
     // Write the block.
     sercom_spi_start(&spi_g, &transactionId, SD_BAUDRATE, SD_CS_PIN_GROUP,
                 SD_CS_PIN_MASK, src, sendBufferLength, &response,
                 responseLength);
     while (!sercom_spi_transaction_done(&spi_g, transactionId));
-
-    // Send two more dummy bytes after sending the data.
-    for (uint8_t i = 0; i < 2; i++) {
-        sercom_spi_start(&spi_g, &transactionId, SD_BAUDRATE, SD_CS_PIN_GROUP,
-                    SD_CS_PIN_MASK, &dummyByte, 1, &response,
-                    responseLength);
-        while (!sercom_spi_transaction_done(&spi_g, transactionId));
-    }
 
     // It is (apparently) mandatory to send CMD13 after every block write
     // presumably because this returns the status of the card.
