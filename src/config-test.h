@@ -130,6 +130,19 @@ extern struct sercom_uart_desc_t uart3_g;
 
 /* USB enabled if defined */
 #define ENABLE_USB
+/* Define to enable USB CDC port 0 */
+#define ENABLE_USB_CDC_PORT_0
+/* Define to enable echo on USB CDC port 0 */
+#define USB_CDC_PORT_0_ECHO
+/* Define to enable USB CDC port 1 */
+//#define ENABLE_USB_CDC_PORT_1
+/* Define to enable echo on USB CDC port 1 */
+//#define USB_CDC_PORT_1_ECHO
+/* Define to enable USB CDC port 2 */
+//#define ENABLE_USB_CDC_PORT_2
+/* Define to enable echo on USB CDC port 2 */
+//#define USB_CDC_PORT_2_ECHO
+// Note: USB CDC ports should be enabled in order to minimize memory usage
 
 //
 //
@@ -137,11 +150,14 @@ extern struct sercom_uart_desc_t uart3_g;
 //
 //
 
-/* Console enabled if defined */
+/* Debugging console enabled if defined */
 #define ENABLE_CONSOLE
 /* UART instance to be used for console, USB is used if not defined (and USB is
  enabled) */
 //#define CONSOLE_UART uart3_g
+/* USB CDC port to be used for debugging console, this is ignored if
+   CONSOLE_UART is defined */
+#define CONSOLE_CDC_PORT 0
 
 //
 //

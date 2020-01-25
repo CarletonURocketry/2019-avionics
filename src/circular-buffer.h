@@ -3,8 +3,8 @@
  * @desc Fixed length circular buffer implementation
  * @author Samuel Dewan
  * @date 2018-12-27
- * Last Author:
- * Last Edited On:
+ * Last Author: Samuel Dewan
+ * Last Edited On: 2019-11-30
  */
 
 #ifndef circular_buffer_h
@@ -25,14 +25,14 @@ struct circular_buffer_t {
 
 
 /**
- *  Initilize a new circular buffer from an existing array.
+ *  Initialize a new circular buffer from an existing array.
  *
- *  @param buffer The buffer descriptor to be initilized.
+ *  @param buffer The buffer descriptor to be initialized.
  *  @param memory The underlying array for the new buffer.
  *  @param length The length for the buffer.
  */
 static inline void init_circular_buffer(struct circular_buffer_t *buffer,
-                                 uint8_t *memory, uint16_t length)
+                                        uint8_t *memory, uint16_t length)
 {
     buffer->buffer = memory;
     buffer->capacity = length;
@@ -108,7 +108,7 @@ static inline uint8_t circular_buffer_capacity(struct circular_buffer_t *buffer)
  *  @param value The data to be inserted.
  */
 static inline void circular_buffer_push(struct circular_buffer_t *buffer,
-                                 uint8_t value)
+                                        uint8_t value)
 {
     __disable_irq();
     
@@ -124,7 +124,7 @@ static inline void circular_buffer_push(struct circular_buffer_t *buffer,
 
 /**
  *  Insert an item at the tail of a circular buffer iff there is space
- *  avaliable.
+ *  available.
  *
  *  @param buffer The circular buffer into which data should be inserted.
  *  @param value The data to be inserted.
@@ -132,7 +132,7 @@ static inline void circular_buffer_push(struct circular_buffer_t *buffer,
  *  @return 0 on success, 1 if the buffer is full
  */
 static inline uint8_t circular_buffer_try_push(struct circular_buffer_t *buffer,
-                                        uint8_t value)
+                                               uint8_t value)
 {
     if (circular_buffer_is_full(buffer)) {
         return 1;
@@ -143,7 +143,7 @@ static inline uint8_t circular_buffer_try_push(struct circular_buffer_t *buffer,
 }
 
 /**
- *  Get the item from the head of a circular buffer, if avaliable, and remove
+ *  Get the item from the head of a circular buffer, if available, and remove
  *  it from the buffer.
  *
  *  @param buffer The circular buffer from which an item should be popped.
@@ -152,7 +152,7 @@ static inline uint8_t circular_buffer_try_push(struct circular_buffer_t *buffer,
  *  @return 0 on success, 1 if the buffer is empty
  */
 static inline uint8_t circular_buffer_pop(struct circular_buffer_t *buffer,
-                                   uint8_t *value)
+                                          uint8_t *value)
 {
     if (circular_buffer_is_empty(buffer)) {
         return 1;
@@ -168,7 +168,61 @@ static inline uint8_t circular_buffer_pop(struct circular_buffer_t *buffer,
 }
 
 /**
- *  Get the item from the head of a circular buffer, if avaliable, without
+ *  Get a pointer to the head of the buffer and the number of contiguous bytes
+ *  in the buffer following the pointer.
+ *
+ *  @param buffer The circular buffer for which the head should be found.
+ *  @param head Pointer a pointer to the head will be placed.
+ *
+ *  @return The number of contiguous bytes in the buffer after the head.
+ */
+static inline uint16_t circular_buffer_get_head(struct circular_buffer_t *buffer,
+                                                uint8_t **head)
+{
+    *head = buffer->buffer + buffer->head;
+    
+    if (circular_buffer_is_empty(buffer)) {
+        return 0;
+    } else if (buffer->head > buffer->tail) {
+        return buffer->capacity - buffer->head;
+    } else {
+        return buffer->tail - buffer->head;
+    }
+}
+
+/**
+ *  Move the head of the buffer forwards by a certain number of bytes. This has
+ *  the effect of removing `length` bytes from the buffer. If the head of the
+ *  buffer would be moved past the tail, the head will be moved up to match the
+ *  tail.
+ *
+ *  @param buffer The circular buffer for which the head should be moved.
+ *  @param length The distance which the head should be moved.
+ */
+static inline void circular_buffer_move_head(struct circular_buffer_t *buffer,
+                                             uint16_t length)
+{
+    if (circular_buffer_is_empty(buffer)) {
+        return;
+    } else if (buffer->head < buffer->tail) {
+        if (buffer->head + length < buffer->tail) {
+            buffer->head += length;
+        } else {
+            buffer->head = buffer->tail;
+        }
+    } else {
+        if (buffer->head + length < buffer->capacity) {
+            buffer->head += length;
+        } else if (((buffer->head + length) % buffer->capacity) < buffer->tail) {
+            buffer->head = (buffer->head + length) % buffer->capacity;
+        } else {
+            buffer->head = buffer->tail;
+        }
+    }
+}
+
+/**
+ *  Get the item from the head of a circular buffer, if available, without
  *  removing it from the buffer.
  *
  *  @param buffer The circular buffer from which an item should be gotten.
@@ -177,7 +231,7 @@ static inline uint8_t circular_buffer_pop(struct circular_buffer_t *buffer,
  *  @return 0 on success, 1 if the buffer is empty
  */
 static inline uint8_t circular_buffer_peak(struct circular_buffer_t *buffer,
-                                    uint8_t *value)
+                                           uint8_t *value)
 {
     if (circular_buffer_is_empty(buffer)) {
         return 1;
@@ -231,6 +285,29 @@ static inline uint8_t circular_buffer_has_char(struct circular_buffer_t *buffer,
          i = ((i + 1) % buffer->capacity)) {
         if (buffer->buffer[i] == c) {
             return 1;
+        }
+    }
+    
+    return 0;
+}
+
+/**
+ *  Determine if the character sequence "\r\n" is present in the buffer.
+ *
+ *  @param buffer The buffer in which the presence of a line should be
+ *                determined.
+ *
+ *  @return 1 if a line is found, 0 otherwise
+ */
+static inline uint8_t circular_buffer_has_line(struct circular_buffer_t *buffer)
+{
+    for (uint16_t i = buffer->head; i != buffer->tail;
+         i = ((i + 1) % buffer->capacity)) {
+        if (buffer->buffer[i] == '\r') {
+            uint16_t next = (i + 1) % buffer->capacity;
+            if ((next != buffer->head) && (buffer->buffer[next] == '\n')) {
+                return 1;
+            }
         }
     }
     

@@ -36,6 +36,6 @@ extern uint8_t init_tc_periodic_event (Tc *tc, uint32_t period,
  *
  *  @return The event generator ID for the Timer Counter's overflow event
  */
-extern uint8_t tc_get_evsys_gen_ovf_id (Tc *tc);
+extern uint8_t tc_get_evsys_gen_ovf_id (Tc *tc) __attribute__((const));
 
 #endif /* tc_h */

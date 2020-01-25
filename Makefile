@@ -9,20 +9,15 @@
 #----------------------------------------------------------------------------
 # On command line:
 #
-# make all = Make software.
+# make build = Make software.
 #
 # make clean = Clean out built project files.
 #
-# make program = Download the hex file to the device, using openocd and GDB.
+# make program = Download the elf file to the device, using openocd and GDB.
 #
-# make debug = Start openocd with a gdb debuging frontend
+# make debug = Start OpenOCD with a GDB debuging frontend
 #
-# make filename.s = Just compile filename.c into the assembler code only.
-#
-# make filename.i = Create a preprocessed source file for use in submitting
-#                   bug reports to the GCC project.
-#
-# To rebuild project do "make clean" then "make all".
+# To rebuild project do "make clean" then "make build".
 #----------------------------------------------------------------------------
 
 # MCU name
@@ -44,7 +39,6 @@ TARGET = main
 SRCDIR = src
 # List C source files here. (C dependencies are automatically generated.)
 SRC = $(wildcard $(SRCDIR)/*.c) $(SRCDIR)/$(MCU_NAME)/startup_$(MCU_NAME).c
-SRC += $(wildcard $(SRCDIR)/usb/*.c) $(wildcard $(SRCDIR)/usb/samd/*.c)
 
 OBJDIR = obj
 # List Assembler source files here.
@@ -67,14 +61,9 @@ OPT = 2
 #     Use forward slashes for directory separators.
 #     For a directory that has spaces, enclose it in quotes.
 EXTRAINCDIRS = $(SRCDIR) $(SRCDIR)/$(MCU_NAME)/include $(SRCDIR)/$(MCU_NAME)/source
-EXTRAINCDIRS += $(SRCDIR)/usb
 
 # Compiler flag to set the C Standard level.
-#     c89   = "ANSI" C
-#     gnu89 = c89 plus GCC extensions
-#     c99   = ISO C99 standard (not yet fully implemented)
-#     gnu99 = c99 plus GCC extensions
-CSTANDARD = -std=gnu99
+CSTANDARD = -std=gnu11
 
 
 # Place -D or -U options here
@@ -84,8 +73,10 @@ CDEFS = -DF_CPU=$(F_CPU)UL
 # Place -I options here
 CINCS = 
 
+
 #---------------- Architecture Options ----------------
 ARCHFLAGS += -mcpu=cortex-m0plus -mthumb 
+
 
 #---------------- Compiler Options ----------------
 #  -g*: 			generate debugging information
@@ -112,13 +103,13 @@ CFLAGS += -Wshift-overflow=2 -Wduplicated-cond -Wpointer-arith -Wwrite-strings
 CFLAGS += -Wnested-externs -Wcast-align -Wredundant-decls -Wlong-long
 CFLAGS += -Werror=implicit-function-declaration -Wlogical-not-parentheses
 CFLAGS += -Wlogical-op -Wold-style-definition -Wcast-qual -Wdouble-promotion
-CFLAGS += -Wunsuffixed-float-constants
-CLFAGS += -Wmissing-include-dirs -Wnormalized -Wdisabled-optimization
+CFLAGS += -Wunsuffixed-float-constants -Wmissing-include-dirs -Wnormalized
+CLFAGS += -Wdisabled-optimization -Wsuggest-attribute=const
 
 # These warning may be usefull in some cases, but cause too many false positives
 # to be enabled all of the time: -Winline -Wpadded -Wvla -Wpedantic -Wconversion
-# -Wnull-dereference -Wsuggest-attribute=pure -Wsuggest-attribute=noreturn
-# -Wsuggest-attribute=const -Wstack-usage=256
+# -Wnull-dereference -Wsuggest-attribute=noreturn -Wsuggest-attribute=pure
+# -Wstack-usage=256
 
 # Disable some anoying warnings
 CFLAGS += -Wno-unused-parameter
@@ -126,6 +117,7 @@ CFLAGS += -Wno-unused-parameter
 CFLAGS += -Wa,-adhlns=$(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.lst,$(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.lst,$<))
 CFLAGS += $(patsubst %,-I%,$(EXTRAINCDIRS))
 CFLAGS += $(CSTANDARD)
+
 
 #---------------- Assembler Options ----------------
 #  -Wa,...:   tell GCC to pass this to the assembler.
@@ -154,11 +146,10 @@ LDFLAGS += -T$(LDSCRIPT) $(ARCHFLAGS) -Wl,--gc-sections --entry=Reset_Handler
 LDFLAGS += --specs=$(SPECS) $(MATH_LIB)
 
 
-#---------------- Programming Options (openocd/dgb) ----------------
-
-
-
 #---------------- Debugging Options ----------------
+
+# Script used to launch OpenOCD and GDB
+DEBUG_CMD = PYTHONDONTWRITEBYTECODE=1 ./debug.py
 
 # Debugging port used to communicate between GDB / openocd.
 OPENOCD_PORT = 4444
@@ -169,6 +160,30 @@ GDB_PORT = 2331
 #     openocd is running on a different computer.
 DEBUG_HOST = localhost
 
+DEBUG_ARGS = --host $(DEBUG_HOST) --gdb-port $(GDB_PORT)
+DEBUG_ARGS += --openocd-port $(OPENOCD_PORT)
+
+# Use user provided OpenOCD if specified
+ifdef OPENOCD_PATH
+DEBUG_ARGS += --openocd $(OPENOCD_PATH)
+endif
+
+# Use GDB from toolchain if one is specified
+ifdef CORTEX_TOOLCHAIN_BIN
+DEBUG_ARGS += --gdb $(CORTEX_TOOLCHAIN_BIN)/arm-none-eabi-gdb
+endif
+
+# Select OpenOCD Interface
+ifdef OPENOCD_INTERFACE
+DEBUG_ARGS += --interface $(OPENOCD_INTERFACE)
+endif
+
+# Use a device file as the GDB server if one is proved, useful for Black Magic
+# Probe. Note that the debug script will not attach to the target automatically,
+# the user needs to perform the scan and attach manually after GDB opens.
+ifdef GDB_FILE
+DEBUG_ARGS += --gdb-file $(GDB_FILE)
+endif
 
 
 #============================================================================
@@ -189,7 +204,6 @@ OBJCOPY = $(CORTEX_TOOLCHAIN_BIN)/arm-none-eabi-objcopy
 OBJDUMP = $(CORTEX_TOOLCHAIN_BIN)/arm-none-eabi-objdump
 SIZE = $(CORTEX_TOOLCHAIN_BIN)/arm-none-eabi-size
 NM = $(CORTEX_TOOLCHAIN_BIN)/arm-none-eabi-nm
-GDB = $(CORTEX_TOOLCHAIN_BIN)/arm-none-eabi-gdb
 else
 # If no toolchain path was provided, try to find a toolchain on the PATH
 CC = arm-none-eabi-gcc
@@ -199,19 +213,9 @@ OBJCOPY = arm-none-eabi-objcopy
 OBJDUMP = arm-none-eabi-objdump
 SIZE = arm-none-eabi-size
 NM = arm-none-eabi-nm
-GDB = arm-none-eabi-gdb
 endif
-ifdef OPENOCD_PATH
-# Use provided OpenOCD
-OPENOCD = $(OPENOCD_PATH)
-else
-# No OpenOCD provided, use OpenOCD on PATH
-OPENOCD = openocd
-endif
-TELNET = /usr/bin/nc
 REMOVE = rm -f
 COPY = cp
-
 
 # Define Messages
 # English
@@ -243,28 +247,12 @@ ALL_ASFLAGS = -D$(PTYPE) -I. -x assembler-with-cpp $(ASFLAGS)
 COMPILE.c = $(CC) $(ALL_CFLAGS) -c
 COMPILE.cpp = $(CC) $(ALL_CFLAGS) -c
 
-# Select OpenOCD configuration
-ifeq ($(OPENOCD_INTERFACE),cmsis)
-OPENOCD_CONFIG=openocd.cfg
-else
-ifeq ($(OPENOCD_INTERFACE),jlink)
-OPENOCD_CONFIG=openocd-jlink.cfg
-endif
-endif
 
-# Define GDB command
-ifdef OPENOCD_INTERFACE
-# Lauch OpenOCD from GDB with pipe
-GDB_CMD = $(GDB) -iex "target extended-remote | $(OPENOCD) -f $(OPENOCD_CONFIG) -l /dev/null" $(OBJDIR)/$(TARGET).elf
-else
-# Use external GDB server over TCP
-GDB_CMD = $(GDB) -iex "target extended-remote $(DEBUG_HOST):$(GDB_PORT)" $(OBJDIR)/$(TARGET).elf
-endif
 
 # Default target.
-all: gccversion clean build program
+build: $(OBJDIR) elf
 
-build:  $(OBJDIR) elf
+all: gccversion clean build program
 
 elf: $(OBJDIR)/$(TARGET).elf
 
@@ -282,29 +270,32 @@ info:
 	@echo OBJ=$(OBJ)
 
 # Program the device.  
-program: upload reset
+program: $(OBJDIR)/$(TARGET).elf
+	@echo
+	@echo $(MSG_PROGRAMMING)
+	$(DEBUG_CMD) $(DEBUG_ARGS) --upload --reset --no-debug $^
 
-# Upload to target with GDB
+# Upload binary to target.
 upload: $(OBJDIR)/$(TARGET).elf
 	@echo
 	@echo $(MSG_PROGRAMMING)
-	echo load | $(GDB_CMD)
+	$(DEBUG_CMD) $(DEBUG_ARGS) --upload --no-debug $^
 
 # Reset the device.
 reset:
 	@echo
 	@echo $(MSG_RESET)
-	$(OPENOCD) -f $(OPENOCD_CONFIG) &
-	sleep 0.5
-	printf "reset run\nshutdown\n" | $(TELNET) $(DEBUG_HOST) $(OPENOCD_PORT)
+	$(DEBUG_CMD) $(DEBUG_ARGS) --reset --no-debug
+	
+# Reset the device and leave halted.
+halt:
 	@echo
+	@echo $(MSG_RESET)
+	$(DEBUG_CMD) $(DEBUG_ARGS) --reset halt --no-debug
 
 # Launch a debugging session.
 debug: $(OBJDIR)/$(TARGET).elf
-	@echo
-	@echo $(MSG_DEBUGGING)
-	$(GDB_CMD)
-
+	$(DEBUG_CMD) $(DEBUG_ARGS) $^
 
 # Link: create ELF output file from object files.
 .SECONDARY : $(OBJDIR)/$(TARGET).elf

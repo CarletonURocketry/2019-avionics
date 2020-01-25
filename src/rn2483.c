@@ -12,9 +12,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-
-#define RN2483_LINE_DELIM   '\r'
-
 #define RN2483_ANALOG_PINS_MASK ((1<<RN2483_GPIO0)  | (1<<RN2483_GPIO1)  | \
                                  (1<<RN2483_GPIO2)  | (1<<RN2483_GPIO3)  | \
                                  (1<<RN2483_GPIO5)  | (1<<RN2483_GPIO6)  | \
@@ -24,66 +21,66 @@
                                  (1<<RN2483_GPIO13))
 #define RN2483_PIN_SUPPORTS_ANA(x) (RN2483_ANALOG_PINS_MASK & (1<<x))
 
-static const char const *RN2483_RSP_OK = "ok";
+static const char* const RN2483_RSP_OK = "ok";
 #define RN2483_RSP_OK_LEN 2
-static const char const *RN2483_RSP_RESET_OK = "RN2483";
+static const char* const RN2483_RSP_RESET_OK = "RN2483";
 #define RN2483_RSP_RESET_OK_LEN 6
-static const char const *RN2483_RSP_TX_OK = "radio_tx_ok";
+static const char* const RN2483_RSP_TX_OK = "radio_tx_ok";
 #define RN2483_RSP_TX_OK_LEN 11
-static const char const *RN2483_RSP_RX_OK = "radio_rx ";
+static const char* const RN2483_RSP_RX_OK = "radio_rx ";
 #define RN2483_RSP_RX_OK_LEN 9
-static const char const *RN2483_RSP_PAUSE_MAC = "4294967245";
+static const char* const RN2483_RSP_PAUSE_MAC = "4294967245";
 #define RN2483_RSP_PAUSE_MAC_LEN 10
 
 
-static const char const *RN2483_CMD_RESET = "sys reset\r\n";
-static const char const *RN2483_CMD_WDT = "radio set wdt 0\r\n";
-static const char const *RN2483_CMD_PAUSE_MAC = "mac pause\r\n";
+static const char* const RN2483_CMD_RESET = "sys reset\r\n";
+static const char* const RN2483_CMD_WDT = "radio set wdt 0\r\n";
+static const char* const RN2483_CMD_PAUSE_MAC = "mac pause\r\n";
 
-static const char const *RN2483_CMD_MODE = "radio set mod lora\r\n";
-static const char const *RN2483_CMD_FREQ = "radio set freq ";
-static const char const *RN2483_CMD_PWR = "radio set pwr ";
-static const char const *RN2483_CMD_SF = "radio set sf ";
-static const char const *RN2483_CMD_CRC = "radio set crc ";
-static const char const *RN2483_CMD_IQI = "radio set iqi ";
-static const char const *RN2483_CMD_CR = "radio set cr ";
-static const char const *RN2483_CMD_SYNC = "radio set sync ";
-static const char const *RN2483_CMD_BW = "radio set bw ";
+static const char* const RN2483_CMD_MODE = "radio set mod lora\r\n";
+static const char* const RN2483_CMD_FREQ = "radio set freq ";
+static const char* const RN2483_CMD_PWR = "radio set pwr ";
+static const char* const RN2483_CMD_SF = "radio set sf ";
+static const char* const RN2483_CMD_CRC = "radio set crc ";
+static const char* const RN2483_CMD_IQI = "radio set iqi ";
+static const char* const RN2483_CMD_CR = "radio set cr ";
+static const char* const RN2483_CMD_SYNC = "radio set sync ";
+static const char* const RN2483_CMD_BW = "radio set bw ";
 
-static const char const *RN2483_CMD_TX = "radio tx ";
-static const char const *RN2483_CMD_RX = "radio rx ";
-static const char const *RN2483_CMD_SNR = "radio get snr\r\n";
+static const char* const RN2483_CMD_TX = "radio tx ";
+static const char* const RN2483_CMD_RX = "radio rx ";
+static const char* const RN2483_CMD_SNR = "radio get snr\r\n";
 
-static const char const *RN2483_CMD_SET_PINMODE = "sys set pinmode ";
-static const char const *RN2483_CMD_SET_PINDIG = "sys set pindig ";
-static const char const *RN2483_CMD_GET_PINDIG = "sys get pindig ";
-static const char const *RN2483_CMD_GET_PINANA = "sys get pinana ";
+static const char* const RN2483_CMD_SET_PINMODE = "sys set pinmode ";
+static const char* const RN2483_CMD_SET_PINDIG = "sys set pindig ";
+static const char* const RN2483_CMD_GET_PINDIG = "sys get pindig ";
+static const char* const RN2483_CMD_GET_PINANA = "sys get pinana ";
 
-static const char const *RN2483_STR_ON = "on\r\n";
-static const char const *RN2483_STR_OFF = "off\r\n";
+static const char* const RN2483_STR_ON = "on\r\n";
+static const char* const RN2483_STR_OFF = "off\r\n";
 
-static const char const *RN2483_STR_SF_7 = "sf7\r\n";
-static const char const *RN2483_STR_SF_8 = "sf8\r\n";
-static const char const *RN2483_STR_SF_9 = "sf9\r\n";
-static const char const *RN2483_STR_SF_10 = "sf10\r\n";
-static const char const *RN2483_STR_SF_11 = "sf11\r\n";
-static const char const *RN2483_STR_SF_12 = "sf12\r\n";
+static const char* const RN2483_STR_SF_7 = "sf7\r\n";
+static const char* const RN2483_STR_SF_8 = "sf8\r\n";
+static const char* const RN2483_STR_SF_9 = "sf9\r\n";
+static const char* const RN2483_STR_SF_10 = "sf10\r\n";
+static const char* const RN2483_STR_SF_11 = "sf11\r\n";
+static const char* const RN2483_STR_SF_12 = "sf12\r\n";
 
-static const char const *RN2483_STR_CR_4_5 = "4/5\r\n";
-static const char const *RN2483_STR_CR_4_6 = "4/6\r\n";
-static const char const *RN2483_STR_CR_4_7 = "4/7\r\n";
-static const char const *RN2483_STR_CR_4_8 = "4/8\r\n";
+static const char* const RN2483_STR_CR_4_5 = "4/5\r\n";
+static const char* const RN2483_STR_CR_4_6 = "4/6\r\n";
+static const char* const RN2483_STR_CR_4_7 = "4/7\r\n";
+static const char* const RN2483_STR_CR_4_8 = "4/8\r\n";
 
-static const char const *RN2483_STR_BW125 = "125\r\n";
-static const char const *RN2483_STR_BW250 = "250\r\n";
-static const char const *RN2483_STR_BW500 = "500\r\n";
+static const char* const RN2483_STR_BW125 = "125\r\n";
+static const char* const RN2483_STR_BW250 = "250\r\n";
+static const char* const RN2483_STR_BW500 = "500\r\n";
 
-static const char const *RN2483_STR_PINSTATE_HIGH = " 1\r\n";
-static const char const *RN2483_STR_PINSTATE_LOW = " 0\r\n";
+static const char* const RN2483_STR_PINSTATE_HIGH = " 1\r\n";
+static const char* const RN2483_STR_PINSTATE_LOW = " 0\r\n";
 
-static const char const *RN2483_STR_PIN_MODE_DIGOUT = " digout\r\n";
-static const char const *RN2483_STR_PIN_MODE_DIGIN = " digin\r\n";
-static const char const *RN2483_STR_PIN_MODE_ANA = " ana\r\n";
+static const char* const RN2483_STR_PIN_MODE_DIGOUT = " digout\r\n";
+static const char* const RN2483_STR_PIN_MODE_DIGIN = " digin\r\n";
+static const char* const RN2483_STR_PIN_MODE_ANA = " ana\r\n";
 
 static const char* const RN2483_PIN_NAMES[] = { "GPIO0",  "GPIO1",  "GPIO2",
                                                 "GPIO3",  "GPIO4",  "GPIO5",
@@ -166,8 +163,7 @@ static uint8_t handle_state (struct rn2483_desc_t *inst, const char *out_buffer,
         inst->cmd_ready = 0;
         
         // Get the received line
-        sercom_uart_get_line(inst->uart, RN2483_LINE_DELIM, inst->buffer,
-                             RN2483_BUFFER_LEN);
+        sercom_uart_get_line(inst->uart, inst->buffer, RN2483_BUFFER_LEN);
         
         if (!strncmp(inst->buffer, expected_response, compare_length)) {
             // Success! Go to next state
@@ -194,8 +190,7 @@ static uint8_t handle_state (struct rn2483_desc_t *inst, const char *out_buffer,
 
 void rn2483_service (struct rn2483_desc_t *inst)
 {
-    if (inst->waiting_for_line && !sercom_uart_has_line(inst->uart,
-                                                        RN2483_LINE_DELIM)) {
+    if (inst->waiting_for_line && !sercom_uart_has_line(inst->uart)) {
         // waiting for a line and a new line has not yet been received
         return;
     }

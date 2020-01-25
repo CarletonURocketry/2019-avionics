@@ -19,4 +19,9 @@
 //#include "config-rocket.h"
 //#include "config-ground.h"
 
+
+/* USB Strings */
+#define USB_MANUFACTURER_STRING u"CU InSpace"
+#define USB_PRODUCT_STRING u"CU InSpace MCU Board"
+
 #endif /* config_h */

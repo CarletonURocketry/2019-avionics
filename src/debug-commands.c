@@ -991,7 +991,7 @@ static void debug_gnss (uint8_t argc, char **argv,
     print_fixed_point(console, gnss_xa1110_descriptor.course, 2);
     
     /* Metadata */
-    console_send_str(console, "degrees\nMetadata\n\tNumber of satellites in "
+    console_send_str(console, "°\nMetadata\n\tNumber of satellites in "
                                "use: ");
     utoa(gnss_xa1110_descriptor.num_sats_in_use, str, 10);
     console_send_str(console, str);
@@ -1102,7 +1102,7 @@ static void debug_gnss (uint8_t argc, char **argv,
         console_send_str(console, "°, SNR: ");
         utoa(gnss_xa1110_descriptor.in_view_gps_satellites[i].snr, str, 10);
         console_send_str(console, str);
-        console_send_str(console, "dB-Hz)\n");
+        console_send_str(console, " dB-Hz)\n");
     }
     
     console_send_str(console, "\tGLONASS satellites in view: ");
@@ -1130,7 +1130,7 @@ static void debug_gnss (uint8_t argc, char **argv,
         console_send_str(console, "°, SNR: ");
         utoa(gnss_xa1110_descriptor.in_view_glonass_satellites[i].snr, str, 10);
         console_send_str(console, str);
-        console_send_str(console, "dB-Hz)\n");
+        console_send_str(console, " dB-Hz)\n");
     }
 #endif
 }
@@ -1142,11 +1142,11 @@ static void debug_lora_version (uint8_t argc, char **argv,
                                 struct console_desc_t *console)
 {
     sercom_uart_put_string_blocking(&uart1_g, "sys get ver\r\n");
-    while (!sercom_uart_has_line(&uart1_g, '\r')) {
+    while (!sercom_uart_has_line(&uart1_g)) {
         wdt_pat();
     }
     char str[128];
-    sercom_uart_get_line(&uart1_g, '\n', str, 128);
+    sercom_uart_get_line(&uart1_g, str, 128);
     console_send_str(console, str);
     console_send_str(console, "\n");
 }
@@ -1609,12 +1609,12 @@ static uint16_t parse_value(char *str, char **end, uint8_t *has_decimal)
         
         char *s = *end + 1;
         
-        if (s == '\0') {
+        if (*s == '\0') {
             return 0;
         }
         
         for (uint16_t weight = 100; weight != 0; weight /= 10) {
-            if (isdigit(*s)) {
+            if (isdigit((unsigned char)*s)) {
                 value += weight * (*s - '0');
             } else {
                 break;
@@ -1742,16 +1742,16 @@ static void debug_dac (uint8_t argc, char **argv,
                          "\n<pin> = r<radio #>.<0 to 17> : RN2483 pin"
 
 #define NUM_HEADER_PINS 24
-static const union gpio_pin_t const HEADER_PINS[] = {
-                                                      GPIO_0,  GPIO_1,  GPIO_2,
-                                                      GPIO_3,  GPIO_4,  GPIO_5,
-                                                      GPIO_6,  GPIO_7,  GPIO_8,
-                                                      GPIO_9,  GPIO_10, GPIO_11,
-                                                      GPIO_12, GPIO_13, GPIO_14,
-                                                      GPIO_15, GPIO_16, GPIO_17,
-                                                      GPIO_18, GPIO_19, GPIO_20,
-                                                      GPIO_21, GPIO_22, GPIO_23
-                                                    };
+static const union gpio_pin_t HEADER_PINS[] = {
+                                                GPIO_0,  GPIO_1,  GPIO_2,
+                                                GPIO_3,  GPIO_4,  GPIO_5,
+                                                GPIO_6,  GPIO_7,  GPIO_8,
+                                                GPIO_9,  GPIO_10, GPIO_11,
+                                                GPIO_12, GPIO_13, GPIO_14,
+                                                GPIO_15, GPIO_16, GPIO_17,
+                                                GPIO_18, GPIO_19, GPIO_20,
+                                                GPIO_21, GPIO_22, GPIO_23
+                                              };
 
 static void debug_gpio (uint8_t argc, char **argv,
                         struct console_desc_t *console)
@@ -1770,7 +1770,7 @@ static void debug_gpio (uint8_t argc, char **argv,
     
     /* Parse pin */
     char* end;
-    if (argv[2][0] == 'g' || isdigit(argv[2][0])) {
+    if (argv[2][0] == 'g' || isdigit((unsigned char)argv[2][0])) {
         // Try and parse pin as a header pin number
         uint32_t pin_num = strtoul(argv[2] + (argv[2][0] == 'g'), &end, 10);
         if ((*end == '\0') && (pin_num < NUM_HEADER_PINS)) {

@@ -104,9 +104,9 @@ static inline uint32_t leap_years_between (uint32_t first, uint32_t last)
             ((first / 4) - (first / 100) + (first / 400)));
 }
 
-static const uint16_t const month_add[] = {0, 31, 31 + 28, 2*31 + 28,
-    2*31 + 30 + 28, 3*31 + 30 + 28, 3*31 + 2*30 + 28, 4*31 + 2*30 + 28,
-    5*31 + 2*30 + 28, 5*31 + 3*30 + 28, 6*31 + 3*30 + 28, 6*31 + 4*30 + 28};
+static const uint16_t month_add[] = {0, 31, 31 + 28, 2*31 + 28, 2*31 + 30 + 28,
+    3*31 + 30 + 28, 3*31 + 2*30 + 28, 4*31 + 2*30 + 28, 5*31 + 2*30 + 28,
+    5*31 + 3*30 + 28, 6*31 + 3*30 + 28, 6*31 + 4*30 + 28};
 
 /**
  *  Parse the time from a NMEA sentence.

@@ -131,8 +131,8 @@ extern void sercom_uart_get_string (struct sercom_uart_desc_t *uart, char *str,
                                     uint16_t len);
 
 /**
- *  Determine if there is a full line available to be read from the UART
- *  buffer.
+ *  Determine if there is a full line, as delimited by the provided char,
+ *  available to be read from the UART buffer.
  *
  *  @param uart The UART for which the availability of a line should be
  *         determined.
@@ -140,8 +140,8 @@ extern void sercom_uart_get_string (struct sercom_uart_desc_t *uart, char *str,
  *
  *  @return 0 if there is no line available, 1 if a line is available.
  */
-extern uint8_t sercom_uart_has_line (struct sercom_uart_desc_t *uart,
-                                     char delim);
+extern uint8_t sercom_uart_has_delim (struct sercom_uart_desc_t *uart,
+                                      char delim);
 
 /**
  *  Read a string from the input buffer up to the next occurrence of a
@@ -152,8 +152,29 @@ extern uint8_t sercom_uart_has_line (struct sercom_uart_desc_t *uart,
  *  @param str The string in which the data should be stored.
  *  @param len The maximum number of chars to be read from the input buffer.
  */
-extern void sercom_uart_get_line (struct sercom_uart_desc_t *uart, char delim,
-                                  char *str, uint16_t len);
+extern void sercom_uart_get_line_delim (struct sercom_uart_desc_t *uart,
+                                        char delim, char *str, uint16_t len);
+
+/**
+ *  Determine if there is a full line, delimited by "\r\n", available to be read
+ *  from the UART buffer.
+ *
+ *  @param uart The UART for which the availability of a line should be
+ *         determined.
+ *
+ *  @return 0 if there is no line available, 1 if a line is available.
+ */
+extern uint8_t sercom_uart_has_line (struct sercom_uart_desc_t *uart);
+
+/**
+ *  Read a string from the input buffer up to the next occurrence of "\r\n".
+ *
+ *  @param uart The UART from which the line should be retrieved.
+ *  @param str The string in which the data should be stored.
+ *  @param len The maximum number of chars to be read from the input buffer.
+ */
+extern void sercom_uart_get_line (struct sercom_uart_desc_t *uart, char *str,
+                                  uint16_t len);
 
 /**
  *  Get a character from the UART input buffer.

@@ -19,7 +19,8 @@
 #include "sercom-i2c.h"
 
 #ifdef ID_USB
-#include "usb/usb.h"
+#include "usb.h"
+#include "usb-cdc.h"
 #else
 #undef ENABLE_USB
 #endif
@@ -401,23 +402,32 @@ int main(void)
 
     // Init GNSS
 #ifdef ENABLE_GNSS
-    init_console(&gnss_console_g, &GNSS_UART, '\r');
+    init_uart_console(&gnss_console_g, &GNSS_UART, '\0');
     init_gnss_xa1110(&gnss_console_g);
 #endif
 
     // Init USB
 #ifdef ENABLE_USB
-    usb_init();
-    usb_set_speed(USB_SPEED_FULL);
+    init_usb(GCLK_CLKCTRL_GEN_GCLK0, USB_SPEED_FULL,
+             &usb_cdc_enable_config_callback, &usb_cdc_disable_config_callback,
+             &usb_cdc_class_request_callback,
+             ((const struct usb_configuration_descriptor*)
+                                                &usb_cdc_config_descriptor));
     usb_attach();
 #endif
 
     // Console
 #ifdef ENABLE_CONSOLE
 #ifdef CONSOLE_UART
-    init_console(&console_g, &CONSOLE_UART, '\r');
+    init_uart_console(&console_g, &CONSOLE_UART, '\r');
 #elif defined ENABLE_USB
-    init_console(&console_g, NULL, '\r');
+#ifdef CONSOLE_CDC_PORT
+    init_usb_cdc_console(&console_g, CONSOLE_CDC_PORT, '\r');
+#else
+#error Debugging console is configured to use USB, but CONSOLE_CDC_PORT is not defined.
+#endif
+#else
+#error Debugging console is configured to use USB, but USB is not enabled.
 #endif
 #endif
 
@@ -463,9 +473,15 @@ int main(void)
     // Ground station console
 #ifdef ENABLE_GROUND_SERVICE
 #ifdef GROUND_UART
-    init_console(&ground_station_console_g, &GROUND_UART, '\r');
+    init_uart_console(&ground_station_console_g, &GROUND_UART, '\r');
 #elif defined ENABLE_USB
-    init_console(&ground_station_console_g, NULL, '\r');
+#ifdef GROUND_CDC_PORT
+    init_usb_cdc_console(&ground_station_console_g, GROUND_CDC_PORT, '\r');
+#else
+#error Ground console is configured to use USB, but GROUND_CDC_PORT is not defined.
+#endif
+#else
+#error Ground console is configured to use USB, but USB is not enabled.
 #endif
     init_ground_service(&ground_station_console_g, &rn2483_g);
 #endif

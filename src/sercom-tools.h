@@ -66,7 +66,7 @@ extern uint8_t sercom_calc_sync_baud (const uint32_t baudrate,
  *
  *  @return The index of the SERCOM, -1 if the pointer is not a valid SERCOM
  */
-extern int8_t sercom_get_inst_num (Sercom *const inst);
+extern int8_t sercom_get_inst_num (Sercom *const inst) __attribute__((const));
 
 /**
  *  Determine the IRQ number for a given SERCOM instance number.
