@@ -1,7 +1,6 @@
 /**
  * @file sd.c
- * @brief Containing function implementations for communicating with the SD
- *          Card
+ * @desc Module for writing data to an SD Card
  *
  * Sources for implementation:
  *  -- https://electronics.stackexchange.com/questions/77417
@@ -45,6 +44,7 @@
 
 /**
  * sd_send_cmd_large()
+ *
  * @brief Sets up the buffer for sending commands to the SD card and then
  * sends the data. This is the version of the function which receives 5 bytes of
  * data for the commands which need this
@@ -59,7 +59,7 @@
  *
  * @return The bytes that the SD card sent in response.
  */
-static inline uint8_t* sd_send_cmd_large(uint8_t cmd, uint32_t arg, uint8_t crc,
+static inline uint8_t* sd_send_cmd(uint8_t cmd, uint32_t arg, uint8_t crc,
         uint8_t* receiveBuffer, uint16_t receiveBufferLength)
 {
     uint8_t transactionId;
@@ -85,45 +85,69 @@ static inline uint8_t* sd_send_cmd_large(uint8_t cmd, uint32_t arg, uint8_t crc,
 }
 
 /**
- * sd_send_cmd()
- * @brief Sets up the buffer for sending commands to the SD card and then
- * sends the data.
+ * write_block()
  *
- * @param cmd The single byte command to send to the SD card.
- * @param arg The four byte argument to send to the SD card.
- * @param crc The crc checksum to send (necessary during initialization,
- *              otherwise optional).
+ * @brief Write a single block to the SD card.
  *
- * @return The byte that the SD card sent in response.
+ * @param blockAddr The address of the block to write to.
+ * @param src A pointer to the data which will be written to the card.
+ *
+ * @return 0 on success, 1 on error.
  */
-static inline uint8_t sd_send_cmd(uint8_t cmd, uint32_t arg, uint8_t crc)
+static inline void write_block(uint8_t* src)
 {
+    static uint32_t blockAddr = 0x00000000;
     uint8_t transactionId;
-    uint8_t receiveBuffer = 0x00;
-    uint8_t sendBuffer[7];
-    uint16_t sendBufferLength = sizeof(sendBuffer);
-    uint16_t receiveBufferLength = sizeof(receiveBuffer);
+    uint8_t response;
+    uint8_t writeBeginByte = 0xFE;
+    uint16_t sendBufferLength = SD_BLOCKSIZE + 1; // +1 for writeBeginByte
+    uint16_t responseLength = sizeof(response);
 
-    sendBuffer[0] = cmd | 0x40; // Every command byte sent must have bit 6 set
-    sendBuffer[1] = arg >> 24;
-    sendBuffer[2] = arg >> 16;
-    sendBuffer[3] = arg >> 8;
-    sendBuffer[4] = arg;
-    sendBuffer[5] = crc; // Usually 0x00 during normal (i.e. not init) operation
-    // The byte below provides 8 clock cycles necessary to allow the card to
-    // complete the operation according to the SD Card spec
-    sendBuffer[6] = 0xFF;
+    // Send the single block write command with our desired address
+    sd_send_cmd(CMD24, blockAddr, 0x00, &response, responseLength);
 
+    /* COMMENTED OUT FOR DEBUGGING */
+    /* if (response != 0x00) { */
+    /*     return 1; */
+    /* } */
+    /* =========================== */
+
+    // First byte sent MUST be 0xFE according to spec.
+    src[0] = writeBeginByte;
+
+    // Write the block.
     sercom_spi_start(&spi_g, &transactionId, SD_BAUDRATE, SD_CS_PIN_GROUP,
-            SD_CS_PIN_MASK, sendBuffer, sendBufferLength, &receiveBuffer,
-            receiveBufferLength);
+                SD_CS_PIN_MASK, src, sendBufferLength, &response,
+                responseLength);
     while (!sercom_spi_transaction_done(&spi_g, transactionId));
 
-    return receiveBuffer;
+    blockAddr++;
 }
 
 /**
- * init()
+ * compare_response()
+ *
+ * @desc Compares a response given by the SD card to a desired response
+ *
+ * @param response The response to be compared
+ * @param compareTo The value we are comparing the response to
+ * @param size The size of the comparison
+ *
+ * @return 0 (false) if the two are not equal, 1 (true) otherwise
+ */
+static inline uint8_t compare_response(uint8_t *response, uint8_t *compareTo,
+        uint16_t size)
+{
+    for (uint8_t i; i < size; i++) {
+        if (response[i] != compareTo[i])
+            return 0;
+    }
+    return 1;
+}
+
+/**
+ * init_sd_card()
+ *
  * @brief Initializes the SD card into SPI mode.
  *
  * @return Either 0 (success) or 1 (failure)
@@ -134,16 +158,17 @@ uint8_t init_sd_card(void)
     uint8_t softResetCount = 0;
     uint8_t response = 0x00;
     uint8_t transactionId;
+    uint8_t sendBuffer[10];
+    uint8_t largeReceiveBuffer[5];
+    uint16_t sendBufferLength = sizeof(sendBuffer);
+    uint16_t receiveBufferLength = sizeof(largeReceiveBuffer);
+    uint16_t responseLength = sizeof(response);
+    memset(sendBuffer, 0xFF, 10);
+    memset(largeReceiveBuffer, 0xFF, 5);
 
     // Put SD card in SPI mode
     // Buffer of all 1s as dummy data
-    uint8_t sendBuffer[10];
-    uint16_t sendBufferLength = sizeof(sendBuffer);
-    memset(sendBuffer, 0xFF, 10);
-
-
-    // Receive Buffer/Length is NULL/0 here because there is no expected
-    // response
+    // Receive Buffer/Length is NULL/0 here because no expected response
     sercom_spi_start(&spi_g, &transactionId, SD_BAUDRATE, SD_CS_PIN_GROUP,
             SD_CS_PIN_MASK, sendBuffer, sendBufferLength, NULL, 0);
     while (!sercom_spi_transaction_done(&spi_g, transactionId));
@@ -152,52 +177,48 @@ uint8_t init_sd_card(void)
     // since it is possible to not get a valid response here but have the next
     // steps work just fine
     while (response != 0x01 && softResetCount < 20) {
-        response = sd_send_cmd(CMD0, 0x00000000, 0x95);
+        sd_send_cmd(CMD0, 0x00000000, 0x95, &response, responseLength);
         softResetCount++;
     }
 
     // This CMD needs a larger response buffer as it sends back the argument in
     // addition to the regular response code
-    uint8_t largeReceiveBuffer[5];
-    memset(largeReceiveBuffer, 0x00, 5);
     while (largeReceiveBuffer[0] != 0x01) {
-        sd_send_cmd_large(CMD8, 0x000001AA, 0x87,
-                          largeReceiveBuffer, sizeof(largeReceiveBuffer));
+        sd_send_cmd(CMD8, 0x000001AA, 0x87, largeReceiveBuffer, receiveBufferLength);
     }
 
     // Apparently most cards require this to be repeated at least once
-    for (uint8_t i = 0; i < 1; i++) {
+    // This behaviour was confirmed in practice
+    for (uint8_t i = 0; i < 2; i++) {
         if (! oldCard) {
-            response = sd_send_cmd(CMD55, 0x00000000, 0x65);
+            sd_send_cmd(CMD55, 0x00000000, 0x65, &response, responseLength);
             // If this response is given, we have an old card that must use CMD1
             if (response == 0x05) {
-                response = sd_send_cmd(CMD1, 0x00000000, 0xF9);
+                sd_send_cmd(CMD1, 0x00000000, 0xF9, &response, responseLength);
                 oldCard = 1;
             }
             // Successful CMD55
             else if (response == 0x01) {
-                response = sd_send_cmd(ACMD41, 0x40000000, 0x77);
-                // Response should be 0x00 indicating the SD card is ready, if
-                // not, initialization has failed.
-                // We must keep repeating CMD55+ACMD41 until we get 0x00
-                if (response != 0x00) {
-                    i--;
-                    continue;
+                sd_send_cmd(ACMD41, 0x40000000, 0x77, &response, responseLength);
+                // If this is the second iteration of the loop and it hasn't
+                // been successful, then return with initialization failed
+                if (i == 1 && response != 0x00) {
+                    return 1;
                 }
             }
             else {
-                // Something is quite wrong, stop initializing.
-                return 2;
+                // Unexpected response/error
+                return 1;
             }
         }
         else {
-            response = sd_send_cmd(CMD1, 0x00000000, 0xF9);
+            sd_send_cmd(CMD1, 0x00000000, 0xF9, &response, responseLength);
         }
     }
     // Set the R/W block size to 512 bytes with CMD16
     // Try 3 times, if success return 0 immediately, card is ready.
     for (uint8_t i = 0; i < 3; i++) {
-        response = sd_send_cmd(CMD16, SD_BLOCKSIZE, 0xFF);
+        sd_send_cmd(CMD16, SD_BLOCKSIZE, 0xFF, &response, responseLength);
         if (response == 0x00)
             return 0;
     }
@@ -206,53 +227,28 @@ uint8_t init_sd_card(void)
 }
 
 /**
- * write_block()
- * @brief Write a single block to the SD card.
+ * sd_card_service()
  *
- * @param blockAddr The address of the block to write to.
- * @param src A pointer to the data which will be written to the card.
- *
- * @return 0 on success, 1 on error.
+ * @brief Checks the status of the SD card and writes a block of data if it is
+ * ready.
  */
-uint8_t write_block(uint32_t blockAddr, uint8_t* src)
+void sd_card_service(uint8_t *src)
 {
-    /* NOTE: This may be difficult to do because the specification and
-     * many of the resources I found required that we wait for responses
-     * and for things to complete on the SD card. Depending on how the SPI
-     * driver schedules things, writes could fail because the SD card
-     * expects to have exclusive control of the SPI bus when it is being
-     * commanded to do something.
-     */
-    uint8_t transactionId;
-    uint8_t response = 0xFF;
-    uint16_t sendBufferLength = SD_BLOCKSIZE + 1; // +1 for writeBeginByte
-    uint16_t responseLength = sizeof(response);
-    uint8_t writeBeginByte = 0xFE;
+    uint8_t idleMode[] = {0x01, 0x00};
+    uint8_t allZero[] = {0x00, 0x00}; // Find better name?
+    uint8_t statusResponse[2];
+    uint16_t statusResponseLength = sizeof(statusResponse);
+    memset(statusResponse, 0xFF, 2);
 
-    // Send CMD24 (the single block write command)
-    response = sd_send_cmd(CMD24, blockAddr, 0x00);
-    // If not immediately successful, exit because we can't afford keep
-    // trying for a single write command.
-    if (response != 0x00) {
-        return 1;
+    // Send the SEND_STATUS command to check the SD card's current status.
+    // Return format is R2 (2 bytes long).
+    sd_send_cmd(CMD13, 0x00000000, 0xFF, statusResponse, statusResponseLength);
+
+    // If the card is in idle mode, write a block.
+    if (compare_response(statusResponse, idleMode, statusResponseLength)
+            || compare_response(statusResponse, allZero, statusResponseLength)) {
+        write_block(src);
     }
 
-    // First byte sent MUST be 0xFE to enable writing of a single block.
-    src[0] = writeBeginByte;
-
-    // Write the block.
-    sercom_spi_start(&spi_g, &transactionId, SD_BAUDRATE, SD_CS_PIN_GROUP,
-                SD_CS_PIN_MASK, src, sendBufferLength, &response,
-                responseLength);
-    while (!sercom_spi_transaction_done(&spi_g, transactionId));
-
-    // It is (apparently) mandatory to send CMD13 after every block write
-    // presumably because this returns the status of the card.
-    response = sd_send_cmd(CMD13, 0x00000000, 0xFF);
-
-    // Check if write was successful.
-    if (response == 0x00)
-        return 0;
-    else
-        return 1;
+    return;
 }

@@ -49,6 +49,9 @@ volatile uint8_t inhibit_sleep_g;
 
 static uint32_t lastLed_g;
 
+// MARK: Global buffer to put data for writing to SD card
+uint8_t data_g[] = {0x00, 0x48, 0x49, 0x20, 0x53, 0x41, 0x4D, 0x0A};
+
 // MARK: Hardware Resources from Config File
 #ifdef SPI_SERCOM_INST
 struct sercom_spi_desc_t spi_g;
@@ -491,21 +494,14 @@ int main(void)
     init_telemetry_service(&rn2483_g, &altimeter_g, TELEMETRY_RATE);
 #endif
 
-    // Initialize SD Card
+#ifdef ENABLE_SD_CARD_SERVICE
     gpio_set_pin_mode(GPIO_7, GPIO_PIN_OUTPUT_TOTEM);
     gpio_set_output(GPIO_7, 1);
     init_sd_card();
+#endif
+
     // Start Watchdog Timer
     //init_wdt(GCLK_CLKCTRL_GEN_GCLK7, 14, 0);
-    // SD CARD TEST
-    uint32_t blockaddr = 0x00000000;
-    uint8_t data[] = {0x00, 0x48, 0x49, 0x20, 0x53, 0x41, 0x4D, 0x0A};
-    write_block(blockaddr, data);
-    blockaddr = 0x00000001;
-    uint8_t data2[] = {0x00, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64, 0x21};
-    write_block(blockaddr, data2);
-    // END SD CARD TEST
-
     // Main Loop
     for (;;) {
 
@@ -580,6 +576,10 @@ static void main_loop (void)
 
 #ifdef ENABLE_TELEMETRY_SERVICE
     telemetry_service();
+#endif
+
+#ifdef ENABLE_SD_CARD_SERVICE
+    sd_card_service(data_g);
 #endif
 }
 

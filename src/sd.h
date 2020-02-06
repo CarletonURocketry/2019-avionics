@@ -1,7 +1,10 @@
 #ifndef SDSPI_H
 #define SDSPI_H
 
+#include "global.h"
 #include "sercom-spi.h"
+
+#define ENABLE_SD_CARD_SERVICE
 
 // SD card pinout
 /** Usually the SS pin */
@@ -14,6 +17,10 @@
 #define SPI_SCK_PIN 18
 
 // SD card errors – From Arduino SD libraries
+// We actually don't use these because we're mostly checking for success and
+// moving on regardless of the type of error. These are kept here in case we
+// should use them in the future or in case we think it would be better to build
+// a fully robust writing system.
 /** timeout error for command CMD0 */
 #define SD_CARD_ERROR_CMD0 0x1
 /** CMD8 was not accepted - not a valid SD card*/
@@ -68,6 +75,9 @@
 #define SD_CARD_TYPE_SDHC 3
 
 // SD card commands
+// Once programming is complete, we should decide if it's worth it to slim down
+// this list to only the commands we use or if it's a good idea to just keep
+// them all in anyways.
 /** GO_IDLE_STATE - init card in spi mode if CS low */
 #define CMD0 0X00
 /** Initialize card fallback code */
@@ -123,13 +133,19 @@
 /** write data accepted token */
 #define DATA_RES_ACCEPTED 0X05
 
-// SD Card functions
-uint8_t init_sd_card(void);
-void chip_select_high(void);
-void chip_select_low(void);
-uint8_t write_block(uint32_t blockAddr, uint8_t* src);
-
 // SD Card block size
 #define SD_BLOCKSIZE 0x00000200
+
+/**
+ * Initialize the SD Card in SPI mode
+ */
+extern uint8_t init_sd_card(void);
+
+/**
+ * The SD Card service, will write data to the SD card in every iteration of the
+ * main loop unless the card is not idle. This may cause the card to fill up
+ * VERY quickly, will maybe have to put a timer on this?
+ */
+extern void sd_card_service(uint8_t *src);
 
 #endif
