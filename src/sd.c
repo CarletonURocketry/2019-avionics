@@ -43,7 +43,7 @@
 #include "sd.h"
 
 /**
- * sd_send_cmd_large()
+ * sd_send_cmd()
  *
  * @brief Sets up the buffer for sending commands to the SD card and then
  * sends the data. This is the version of the function which receives 5 bytes of
@@ -80,6 +80,7 @@ static inline uint8_t* sd_send_cmd(uint8_t cmd, uint32_t arg, uint8_t crc,
             SD_CS_PIN_MASK, sendBuffer, sendBufferLength, receiveBuffer,
             receiveBufferLength);
     while (!sercom_spi_transaction_done(&spi_g, transactionId));
+    sercom_spi_clear_transaction(&spi_g, transactionId);
 
     return 0;
 }
@@ -100,26 +101,30 @@ static inline void write_block(uint8_t* src)
     uint8_t transactionId;
     uint8_t response;
     uint8_t writeBeginByte = 0xFE;
-    uint16_t sendBufferLength = SD_BLOCKSIZE + 1; // +1 for writeBeginByte
+    // Blocksize +1 for writeBeginByte +2 for CRC bytes at end.
+    uint16_t sendBufferLength = SD_BLOCKSIZE + 3;
     uint16_t responseLength = sizeof(response);
 
     // Send the single block write command with our desired address
     sd_send_cmd(CMD24, blockAddr, 0x00, &response, responseLength);
 
-    /* COMMENTED OUT FOR DEBUGGING */
-    /* if (response != 0x00) { */
-    /*     return 1; */
-    /* } */
-    /* =========================== */
+    if (response != 0x00) {
+        return;
+    }
 
     // First byte sent MUST be 0xFE according to spec.
     src[0] = writeBeginByte;
+    // 16-bit "CRC" at end of block write
+    src[514] = 0xFF;
+    src[513] = 0xFF;
+    src[512] = 0xAA;
 
     // Write the block.
     sercom_spi_start(&spi_g, &transactionId, SD_BAUDRATE, SD_CS_PIN_GROUP,
                 SD_CS_PIN_MASK, src, sendBufferLength, &response,
                 responseLength);
     while (!sercom_spi_transaction_done(&spi_g, transactionId));
+    sercom_spi_clear_transaction(&spi_g, transactionId);
 
     blockAddr++;
 }
@@ -172,6 +177,7 @@ uint8_t init_sd_card(void)
     sercom_spi_start(&spi_g, &transactionId, SD_BAUDRATE, SD_CS_PIN_GROUP,
             SD_CS_PIN_MASK, sendBuffer, sendBufferLength, NULL, 0);
     while (!sercom_spi_transaction_done(&spi_g, transactionId));
+    sercom_spi_clear_transaction(&spi_g, transactionId);
 
     // Repeat until soft reset successful or a reasonable number of times
     // since it is possible to not get a valid response here but have the next
@@ -215,11 +221,16 @@ uint8_t init_sd_card(void)
             sd_send_cmd(CMD1, 0x00000000, 0xF9, &response, responseLength);
         }
     }
+
+    // Turn off CRC requirement
+    sd_send_cmd(CMD59, 0x00000000, 0xFF, &response, responseLength);
+
     // Set the R/W block size to 512 bytes with CMD16
     // Try 3 times, if success return 0 immediately, card is ready.
+    // Only necessary for standard capacity cards, not for HC, XC cards
     for (uint8_t i = 0; i < 3; i++) {
         sd_send_cmd(CMD16, SD_BLOCKSIZE, 0xFF, &response, responseLength);
-        if (response == 0x00)
+        if (response == 0x00 || response == 0x04)
             return 0;
     }
     // In all other error cases, return 1
@@ -234,19 +245,17 @@ uint8_t init_sd_card(void)
  */
 void sd_card_service(uint8_t *src)
 {
-    uint8_t idleMode[] = {0x01, 0x00};
     uint8_t allZero[] = {0x00, 0x00}; // Find better name?
     uint8_t statusResponse[2];
     uint16_t statusResponseLength = sizeof(statusResponse);
-    memset(statusResponse, 0xFF, 2);
+    memset(statusResponse, 0xAA, 2);
 
     // Send the SEND_STATUS command to check the SD card's current status.
     // Return format is R2 (2 bytes long).
     sd_send_cmd(CMD13, 0x00000000, 0xFF, statusResponse, statusResponseLength);
 
-    // If the card is in idle mode, write a block.
-    if (compare_response(statusResponse, idleMode, statusResponseLength)
-            || compare_response(statusResponse, allZero, statusResponseLength)) {
+    // If the card is ready, write a block.
+    if (compare_response(statusResponse, allZero, statusResponseLength)) {
         write_block(src);
     }
 

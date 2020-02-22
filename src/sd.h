@@ -109,6 +109,9 @@
 #define CMD55 0X37
 /** READ_OCR - read the OCR register of a card */
 #define CMD58 0X3A
+/** CRC_ON_OFF - turn the requirement to send the CRC with a command on/off */
+#define CMD59 0X3B
+
 /** SET_WR_BLK_ERASE_COUNT - Set the number of write blocks to be
    pre-erased before writing */
 #define ACMD23 0X17

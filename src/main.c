@@ -7,6 +7,8 @@
  * Last Edited On:
  */
 
+#include <string.h>
+
 #include "global.h"
 #include "config.h"
 
@@ -50,7 +52,8 @@ volatile uint8_t inhibit_sleep_g;
 static uint32_t lastLed_g;
 
 // MARK: Global buffer to put data for writing to SD card
-uint8_t data_g[] = {0x00, 0x48, 0x49, 0x20, 0x53, 0x41, 0x4D, 0x0A};
+static char data_g[515];
+static uint8_t sdInitialized_g;
 
 // MARK: Hardware Resources from Config File
 #ifdef SPI_SERCOM_INST
@@ -497,7 +500,20 @@ int main(void)
 #ifdef ENABLE_SD_CARD_SERVICE
     gpio_set_pin_mode(GPIO_7, GPIO_PIN_OUTPUT_TOTEM);
     gpio_set_output(GPIO_7, 1);
-    init_sd_card();
+    sdInitialized_g = !init_sd_card();
+    memset(data_g, 0x00, 515);
+    data_g[1]  = 'H';
+    data_g[2]  = 'E';
+    data_g[3]  = 'L';
+    data_g[4]  = 'L';
+    data_g[5]  = 'O';
+    data_g[6]  = ' ';
+    data_g[7]  = 'W';
+    data_g[8]  = 'O';
+    data_g[9]  = 'R';
+    data_g[10] = 'L';
+    data_g[11] = 'D';
+    data_g[12] = '!';
 #endif
 
     // Start Watchdog Timer
@@ -579,7 +595,11 @@ static void main_loop (void)
 #endif
 
 #ifdef ENABLE_SD_CARD_SERVICE
-    sd_card_service(data_g);
+    static uint32_t lastSDWrite = 0;
+    if(sdInitialized_g && ((millis - lastSDWrite) > 1000)) {
+        sd_card_service((uint8_t *) data_g);
+        lastSDWrite = millis;
+    }
 #endif
 }
 
