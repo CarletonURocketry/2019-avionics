@@ -51,10 +51,6 @@ volatile uint8_t inhibit_sleep_g;
 
 static uint32_t lastLed_g;
 
-// MARK: Global buffer to put data for writing to SD card
-static char data_g[515];
-static uint8_t sdInitialized_g;
-
 // MARK: Hardware Resources from Config File
 #ifdef SPI_SERCOM_INST
 struct sercom_spi_desc_t spi_g;
@@ -96,6 +92,10 @@ struct console_desc_t gnss_console_g;
 
 #ifdef ENABLE_GROUND_SERVICE
 struct console_desc_t ground_station_console_g;
+#endif
+
+#ifdef ENABLE_SD_SERVICE
+struct sd_desc_t sd_g;
 #endif
 
 // Stores 2 ^ TRACE_BUFFER_MAGNITUDE_PACKETS packets.
@@ -500,20 +500,25 @@ int main(void)
 #ifdef ENABLE_SD_CARD_SERVICE
     gpio_set_pin_mode(GPIO_7, GPIO_PIN_OUTPUT_TOTEM);
     gpio_set_output(GPIO_7, 1);
-    sdInitialized_g = !init_sd_card();
-    memset(data_g, 0x00, 515);
-    data_g[1]  = 'H';
-    data_g[2]  = 'E';
-    data_g[3]  = 'L';
-    data_g[4]  = 'L';
-    data_g[5]  = 'O';
-    data_g[6]  = ' ';
-    data_g[7]  = 'W';
-    data_g[8]  = 'O';
-    data_g[9]  = 'R';
-    data_g[10] = 'L';
-    data_g[11] = 'D';
-    data_g[12] = '!';
+    sd_g->blockAddr = 0x00000000;
+    memset(sd_g->data, 0x00, 518);
+    sd_g->currentTransactionId = 0x00;
+    sd_g->initializing = 0;
+    sd_g->initialized = 0;
+    sd_g->state = INIT;
+    init_sd_card(sd_g);
+    sd_g->data[1]  = 'H';
+    sd_g->data[2]  = 'E';
+    sd_g->data[3]  = 'L';
+    sd_g->data[4]  = 'L';
+    sd_g->data[5]  = 'O';
+    sd_g->data[6]  = ' ';
+    sd_g->data[7]  = 'W';
+    sd_g->data[8]  = 'O';
+    sd_g->data[9]  = 'R';
+    sd_g->data[10] = 'L';
+    sd_g->data[11] = 'D';
+    sd_g->data[12] = '!';
 #endif
 
     // Start Watchdog Timer

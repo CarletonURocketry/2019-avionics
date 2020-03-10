@@ -66,13 +66,6 @@
 /** incorrect rate selected */
 #define SD_CARD_ERROR_SCK_RATE 0x16
 //------------------------------------------------------------------------------
-// card types
-/** Standard capacity V1 SD card */
-#define SD_CARD_TYPE_SD1 1
-/** Standard capacity V2 SD card */
-#define SD_CARD_TYPE_SD2 2
-/** High Capacity SD card */
-#define SD_CARD_TYPE_SDHC 3
 
 // SD card commands
 // Once programming is complete, we should decide if it's worth it to slim down
@@ -111,7 +104,6 @@
 #define CMD58 0X3A
 /** CRC_ON_OFF - turn the requirement to send the CRC with a command on/off */
 #define CMD59 0X3B
-
 /** SET_WR_BLK_ERASE_COUNT - Set the number of write blocks to be
    pre-erased before writing */
 #define ACMD23 0X17
@@ -119,12 +111,15 @@
   activates the card's initialization process */
 #define ACMD41 0X29
 //------------------------------------------------------------------------------
+
 /** status for card in the ready state */
 #define R1_READY_STATE 0X00
 /** status for card in the idle state */
 #define R1_IDLE_STATE 0X01
 /** status bit for illegal command */
 #define R1_ILLEGAL_COMMAND 0X04
+/** old card response to CMD55 */
+#define R1_USE_CMD1 0X05
 /** start data token for read or write single block*/
 #define DATA_START_BLOCK 0XFE
 /** stop token for write multiple blocks*/
@@ -139,16 +134,35 @@
 // SD Card block size
 #define SD_BLOCKSIZE 0x00000200
 
-/**
- * Initialize the SD Card in SPI mode
- */
-extern uint8_t init_sd_card(void);
+// Actions
+#define SD_ACTION_WRITE 0x00
+#define SD_ACTION_READ 0x01
 
-/**
- * The SD Card service, will write data to the SD card in every iteration of the
- * main loop unless the card is not idle. This may cause the card to fill up
- * VERY quickly, will maybe have to put a timer on this?
- */
-extern void sd_card_service(uint8_t *src);
+// TODO: Add states for every step of current init function
+enum sd_state {
+    INIT,
+    INIT_WAIT,
+    WRITE_WAIT,
+    READ_WAIT,
+    READY,
+    FAILED
+}
+
+enum sd_result {
+
+}
+
+// TODO: Response in struct
+// TODO: Add pointer to SERCOM_SPI instance
+struct sd_desc_t {
+    uint32_t blockAddr;
+    char data[518];
+    uint8_t currentTransactionId;
+    uint8_t initializing : 1;
+    enum sd_state state;
+}
+
+extern void init_sd_card(struct sd_desc_t *inst);
+extern void sd_card_service(struct sd_desc_t *inst, uint8_t *src, uint8_t action);
 
 #endif
