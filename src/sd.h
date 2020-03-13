@@ -140,25 +140,38 @@
 
 // TODO: Add states for every step of current init function
 enum sd_state {
-    INIT,
-    INIT_WAIT,
-    WRITE_WAIT,
-    READ_WAIT,
-    READY,
-    FAILED
+    SD_SPI_MODE_WAIT,
+    SD_SOFT_RESET_WAIT,
+    SD_CMD8_WAIT,
+    SD_CMD55_WAIT,
+    SD_CMD1_WAIT,
+    SD_ACMD41_WAIT,
+    SD_CMD59_WAIT,
+    SD_CMD16_WAIT,
+    SD_READY,
+    SD_WRITE_WAIT,
+    SD_READ_WAIT,
+    SD_FAILED
 }
 
-enum sd_result {
-
-}
-
-// TODO: Response in struct
-// TODO: Add pointer to SERCOM_SPI instance
 struct sd_desc_t {
+    /** SPI instance used to communicate with device */
+    struct sercom_spi_desc_t *spi_inst;
+    /** Currently address block for read/write **/
     uint32_t blockAddr;
+    /** Data to write, or data from read **/
+    /** 512 + 1 start byte + 2 crc bytes + 3 alignment bytes: **/
+    /** 3 Unused Bytes | 0xFE | 512 Bytes of Data | 0xFF 0xFF **/
     char data[518];
+    /** Transaction ID of currently executing SPI transaction**/
     uint8_t currentTransactionId;
-    uint8_t initializing : 1;
+    /** Responses which also send back the argument (e.g. CMD8)**/
+    uint8_t argumentResponse[5];
+    /** Responses which send back two bytes (e.g. writes)**/
+    uint8_t doubleByteResponse[2];
+    /** Most Responses, only one byte**/
+    uint8_t singleByteResponse;
+    /** Current state of the SD card driver**/
     enum sd_state state;
 }
 
