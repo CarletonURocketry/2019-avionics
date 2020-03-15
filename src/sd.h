@@ -138,8 +138,8 @@
 #define SD_ACTION_WRITE 0x00
 #define SD_ACTION_READ 0x01
 
-// TODO: Add states for every step of current init function
 enum sd_state {
+    SD_INIT,
     SD_SPI_MODE_WAIT,
     SD_SOFT_RESET_WAIT,
     SD_CMD8_WAIT,
@@ -152,6 +152,11 @@ enum sd_state {
     SD_WRITE_WAIT,
     SD_READ_WAIT,
     SD_FAILED
+}
+
+enum sd_action {
+    SD_ACTION_WRITE,
+    SD_ACTION_READ
 }
 
 struct sd_desc_t {
@@ -171,8 +176,11 @@ struct sd_desc_t {
     uint8_t doubleByteResponse[2];
     /** Most Responses, only one byte**/
     uint8_t singleByteResponse;
+    /** Identifying the card as old or not **/
+    uint8_t oldCard:1;
     /** Current state of the SD card driver**/
     enum sd_state state;
+    enum sd_action action;
 }
 
 extern void init_sd_card(struct sd_desc_t *inst);

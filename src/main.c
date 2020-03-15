@@ -498,27 +498,7 @@ int main(void)
 #endif
 
 #ifdef ENABLE_SD_CARD_SERVICE
-    gpio_set_pin_mode(GPIO_7, GPIO_PIN_OUTPUT_TOTEM);
-    gpio_set_output(GPIO_7, 1);
-    sd_g->blockAddr = 0x00000000;
-    memset(sd_g->data, 0x00, 518);
-    sd_g->currentTransactionId = 0x00;
-    sd_g->initializing = 0;
-    sd_g->initialized = 0;
-    sd_g->state = INIT;
-    init_sd_card(sd_g);
-    sd_g->data[1]  = 'H';
-    sd_g->data[2]  = 'E';
-    sd_g->data[3]  = 'L';
-    sd_g->data[4]  = 'L';
-    sd_g->data[5]  = 'O';
-    sd_g->data[6]  = ' ';
-    sd_g->data[7]  = 'W';
-    sd_g->data[8]  = 'O';
-    sd_g->data[9]  = 'R';
-    sd_g->data[10] = 'L';
-    sd_g->data[11] = 'D';
-    sd_g->data[12] = '!';
+    init_sd_card(&sd_g);
 #endif
 
     // Start Watchdog Timer
@@ -600,11 +580,7 @@ static void main_loop (void)
 #endif
 
 #ifdef ENABLE_SD_CARD_SERVICE
-    static uint32_t lastSDWrite = 0;
-    if(sdInitialized_g && ((millis - lastSDWrite) > 1000)) {
-        sd_card_service((uint8_t *) data_g);
-        lastSDWrite = millis;
-    }
+    sd_card_service();
 #endif
 }
 
