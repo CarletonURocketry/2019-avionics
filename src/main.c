@@ -94,7 +94,7 @@ struct console_desc_t gnss_console_g;
 struct console_desc_t ground_station_console_g;
 #endif
 
-#ifdef ENABLE_SD_SERVICE
+#ifdef ENABLE_SD_CARD_SERVICE
 struct sd_desc_t sd_g;
 #endif
 
@@ -580,7 +580,7 @@ static void main_loop (void)
 #endif
 
 #ifdef ENABLE_SD_CARD_SERVICE
-    sd_card_service();
+    sd_card_service(&sd_g);
 #endif
 }
 

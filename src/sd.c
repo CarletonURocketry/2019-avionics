@@ -61,9 +61,9 @@
  * @return The bytes that the SD card sent in response.
  */
 static inline uint8_t* sd_send_cmd(uint8_t cmd, uint32_t arg, uint8_t crc,
-        uint8_t* receiveBuffer, uint16_t receiveBufferLength)
+        uint8_t* receiveBuffer, uint16_t receiveBufferLength,
+        struct sd_desc_t *inst)
 {
-    uint8_t transactionId;
     uint8_t sendBuffer[7];
     uint16_t sendBufferLength = sizeof(sendBuffer);
 
@@ -75,10 +75,9 @@ static inline uint8_t* sd_send_cmd(uint8_t cmd, uint32_t arg, uint8_t crc,
     sendBuffer[5] = crc;
     sendBuffer[6] = 0xFF; // 8 clock cycles to allow card to process command
 
-    sercom_spi_start(&spi_g, inst->currentTransactionId, SD_BAUDRATE,
+    sercom_spi_start(inst->spi_inst, &inst->currentTransactionId, SD_BAUDRATE,
             SD_CS_PIN_GROUP, SD_CS_PIN_MASK, sendBuffer, sendBufferLength,
             receiveBuffer, receiveBufferLength);
-    sercom_spi_clear_transaction(&spi_g, transactionId);
 
     return 0;
 }
@@ -95,54 +94,34 @@ static inline uint8_t* sd_send_cmd(uint8_t cmd, uint32_t arg, uint8_t crc,
  */
 static inline void write_block(struct sd_desc_t *inst)
 {
-    uint8_t response;
     uint8_t writeBeginByte = 0xFE;
-    // Blocksize +1 for writeBeginByte +2 for CRC bytes at end.
-    uint16_t sendBufferLength = SD_BLOCKSIZE + 3;
-    uint16_t responseLength = sizeof(response);
 
-    init->state = WRITE_WAIT;
+    inst->state = SD_WRITE_WAIT;
 
     // Send the single block write command with our desired address
-    sd_send_cmd(CMD24, inst->blockAddr, 0x00, &response, responseLength);
+    sd_send_cmd(CMD24, inst->blockAddr, 0x00, &inst->singleByteResponse, 1, inst);
 
-    if (response != 0x00) {
+    if (inst->singleByteResponse != 0x00) {
         return;
     }
 
     // First byte sent MUST be 0xFE according to spec. (align 4th byte boundary)
     inst->data[3] = writeBeginByte;
     // 16-bit "CRC" at end of block write
-    inst->data[516] = 0xAA;
+    inst->data[515] = 0xAA;
+    inst->data[516] = 0xFF;
     inst->data[517] = 0xFF;
-    inst->data[518] = 0xFF;
 
     // Write the block.
-    sercom_spi_start(&spi_g, inst->currentTransactionId, SD_BAUDRATE,
-            SD_CS_PIN_GROUP, SD_CS_PIN_MASK, inst->data, sendBufferLength,
-            &response, responseLength);
-    sercom_spi_clear_transaction(&spi_g, transactionId);
+    sercom_spi_start(inst->spi_inst, &inst->currentTransactionId, SD_BAUDRATE,
+            SD_CS_PIN_GROUP, SD_CS_PIN_MASK, inst->data, sizeof(inst->data),
+            &inst->singleByteResponse, 1);
+    sercom_spi_clear_transaction(inst->spi_inst, inst->currentTransactionId);
 }
 
-/**
- * compare_response()
- *
- * @desc Compares a response given by the SD card to a desired response
- *
- * @param response The response to be compared
- * @param compareTo The value we are comparing the response to
- * @param size The size of the comparison
- *
- * @return 0 (false) if the two are not equal, 1 (true) otherwise
- */
-static inline uint8_t compare_response(uint8_t *response, uint8_t *compareTo,
-        uint16_t size)
+static inline void read_block(struct sd_desc_t *inst)
 {
-    for (uint8_t i; i < size; i++) {
-        if (response[i] != compareTo[i])
-            return 0;
-    }
-    return 1;
+    return;
 }
 
 /**
@@ -157,75 +136,33 @@ void init_sd_card(struct sd_desc_t *inst)
     gpio_set_pin_mode(GPIO_7, GPIO_PIN_OUTPUT_TOTEM);
     gpio_set_output(GPIO_7, 1);
 
-    memset(sd_g->data, 0x00, 518);
-    memset(sd_g->argumentResponse, 0x00, 5);
-    memset(sd_g->doubleByteResponse, 0x00, 2);
-    memset(sd_g->singleByteResponse, 0x00, 1);
+    memset(&inst->data, 0x00, 518);
+    memset(&inst->argumentResponse, 0x00, 5);
+    memset(&inst->doubleByteResponse, 0x00, 2);
+    memset(&inst->singleByteResponse, 0x00, 1);
 
-    sd_g->blockAddr = 0x00000000;
-    sd_g->sercom_spi_desc_t = &spi_g;
-    sd_g->currentTransactionId = 0x00;
+    inst->blockAddr = 0x00000000;
+    inst->spi_inst = &spi_g;
+    inst->currentTransactionId = 0x00;
 
-    sd_g->oldCard = 0;
+    inst->oldCard = 0;
 
     // DEBUG
-    sd_g->data[1]  = 'H';
-    sd_g->data[2]  = 'E';
-    sd_g->data[3]  = 'L';
-    sd_g->data[4]  = 'L';
-    sd_g->data[5]  = 'O';
-    sd_g->data[6]  = ' ';
-    sd_g->data[7]  = 'W';
-    sd_g->data[8]  = 'O';
-    sd_g->data[9]  = 'R';
-    sd_g->data[10] = 'L';
-    sd_g->data[11] = 'D';
-    sd_g->data[12] = '!';
+    inst->data[1]  = 'H';
+    inst->data[2]  = 'E';
+    inst->data[3]  = 'L';
+    inst->data[4]  = 'L';
+    inst->data[5]  = 'O';
+    inst->data[6]  = ' ';
+    inst->data[7]  = 'W';
+    inst->data[8]  = 'O';
+    inst->data[9]  = 'R';
+    inst->data[10] = 'L';
+    inst->data[11] = 'D';
+    inst->data[12] = '!';
     // DEBUG
 
     inst->state = SD_SPI_MODE_WAIT;
-
-    // Apparently most cards require this to be repeated at least once
-    // This behaviour was confirmed in practice
-    for (uint8_t i = 0; i < 2; i++) {
-        if (! oldCard) {
-            // If this response is given, we have an old card that must use CMD1
-            if (response == R1_USE_CMD1) {
-                oldCard = 1;
-            }
-            // Successful CMD55
-            else if (response == R1_IDLE_STATE) {
-                sd_send_cmd(ACMD41, 0x40000000, 0x77, &response, responseLength);
-                // If this is the second iteration of the loop and it hasn't
-                // been successful, then return with initialization failed
-                if (i == 1 && response != R1_READY_STATE) {
-                    goto failed_init;
-                }
-            }
-            else {
-                // Unexpected response/error
-                goto failed_init;
-            }
-        }
-        else {
-        }
-    }
-
-    // Turn off CRC requirement
-
-    // Set the R/W block size to 512 bytes with CMD16
-    // Try 3 times, if success return 0 immediately, card is ready.
-    // Only necessary for standard capacity cards, not for HC, XC cards
-    for (uint8_t i = 0; i < 3; i++) {
-        if (response == R1_READY_STATE || response == R1_ILLEGAL_COMMAND) {
-            inst->initialized = 1;
-            inst->initializing = 0;
-        }
-    }
-    // Otherwise, keep SD Card uninitialized
-    failed_init:
-    inst->initialized = 0;
-    inst->initializing = 0;
 }
 
 /**
@@ -239,59 +176,59 @@ void init_sd_card(struct sd_desc_t *inst)
 void sd_card_service(struct sd_desc_t *inst)
 {
     static uint8_t repeatedCMD = 0;
+    static uint8_t spiSendBuffer[10];
 
     switch(inst->state){
     case SD_FAILED:
         break;
     case SD_INIT:
-        uint8_t spiSendBuffer[10];
         memset(spiSendBuffer, 0xFF, 10);
-        uint16_t spiSendBufferLength = sizeof(sendBuffer);
+        uint16_t spiSendBufferLength = sizeof(spiSendBuffer);
 
-        sercom_spi_start(inst->sercom_spi_desc_t, inst->currentTransactionId,
+        sercom_spi_start(inst->spi_inst, &inst->currentTransactionId,
                 SD_BAUDRATE, SD_CS_PIN_GROUP, SD_CS_PIN_MASK, spiSendBuffer,
                 spiSendBufferLength, NULL, 0);
         inst->state = SD_SPI_MODE_WAIT;
 
         break;
     case SD_SPI_MODE_WAIT:
-        if (sercom_spi_transaction_done(inst->sercom_spi_desc_t,
+        if (sercom_spi_transaction_done(inst->spi_inst,
                 inst->currentTransactionId)) {
-            sercom_spi_clear_transaction(&spi_g, transactionId);
-            sd_send_cmd(CMD0, 0x00000000, 0x95, inst->singleByteResponse, 1);
+            sercom_spi_clear_transaction(inst->spi_inst, inst->currentTransactionId);
+            sd_send_cmd(CMD0, 0x00000000, 0x95, &inst->singleByteResponse, 1, inst);
             inst->state = SD_SOFT_RESET_WAIT;
         }
         break;
     case SD_SOFT_RESET_WAIT:
-        if (sercom_spi_transaction_done(inst->sercom_spi_desc_t,
+        if (sercom_spi_transaction_done(inst->spi_inst,
                 inst->currentTransactionId)) {
-            sercom_spi_clear_transaction(&spi_g, transactionId);
+            sercom_spi_clear_transaction(inst->spi_inst, inst->currentTransactionId);
             if (inst->singleByteResponse != R1_IDLE_STATE) {
                 inst->state = SD_FAILED;
                 break;
             }
-            sd_send_cmd(CMD8, 0x000001AA, 0x87, inst->argumentResponse, 5);
+            sd_send_cmd(CMD8, 0x000001AA, 0x87, inst->argumentResponse, 5, inst);
             inst->state = SD_CMD8_WAIT;
         }
         break;
     case SD_CMD8_WAIT:
-        if (sercom_spi_transaction_done(inst->sercom_spi_desc_t,
+        if (sercom_spi_transaction_done(inst->spi_inst,
                 inst->currentTransactionId)) {
-            sercom_spi_clear_transaction(&spi_g, transactionId);
+            sercom_spi_clear_transaction(inst->spi_inst, inst->currentTransactionId);
             if (inst->argumentResponse[0] != R1_IDLE_STATE) {
                 inst->state = SD_FAILED;
                 break;
             }
-            sd_send_cmd(CMD55, 0x00000000, 0x65, inst->singleByteResponse, 1);
+            sd_send_cmd(CMD55, 0x00000000, 0x65, &inst->singleByteResponse, 1, inst);
             inst->state = SD_CMD55_WAIT;
         }
         break;
     case SD_CMD55_WAIT:
-        if (sercom_spi_transaction_done(inst->sercom_spi_desc_t,
+        if (sercom_spi_transaction_done(inst->spi_inst,
                 inst->currentTransactionId)) {
-            sercom_spi_clear_transaction(&spi_g, transactionId);
+            sercom_spi_clear_transaction(inst->spi_inst, inst->currentTransactionId);
             if (inst->singleByteResponse == R1_USE_CMD1) {
-                sd_send_cmd(CMD1, 0x00000000, 0xF9, inst->singleByteResponse, 1);
+                sd_send_cmd(CMD1, 0x00000000, 0xF9, &inst->singleByteResponse, 1, inst);
                 inst->state = SD_CMD1_WAIT;
                 break;
             }
@@ -299,16 +236,16 @@ void sd_card_service(struct sd_desc_t *inst)
                 inst->state = SD_FAILED;
                 break;
             }
-            sd_send_cmd(ACMD41, 0x40000000, 0x77, inst->singleByteResponse, 1);
+            sd_send_cmd(ACMD41, 0x40000000, 0x77, &inst->singleByteResponse, 1, inst);
             inst->state = SD_ACMD41_WAIT;
         }
         break;
     case SD_CMD1_WAIT:
-        if (sercom_spi_transaction_done(inst->sercom_spi_desc_t,
+        if (sercom_spi_transaction_done(inst->spi_inst,
                 inst->currentTransactionId)) {
-            sercom_spi_clear_transaction(&spi_g, transactionId);
+            sercom_spi_clear_transaction(inst->spi_inst, inst->currentTransactionId);
             if (repeatedCMD == 0) {
-                sd_send_cmd(CMD1, 0x00000000, 0xF9, inst->singleByteResponse, 1);
+                sd_send_cmd(CMD1, 0x00000000, 0xF9, &inst->singleByteResponse, 1, inst);
                 repeatedCMD = 1;
                 inst->state = SD_CMD1_WAIT;
                 break;
@@ -317,16 +254,16 @@ void sd_card_service(struct sd_desc_t *inst)
                 inst->state = SD_FAILED;
                 break;
             }
-            sd_send_cmd(CMD59, 0x00000000, 0xFF, inst->singleByteResponse, 1);
+            sd_send_cmd(CMD59, 0x00000000, 0xFF, &inst->singleByteResponse, 1, inst);
             inst->state = SD_CMD59_WAIT;
         }
         break;
     case SD_ACMD41_WAIT:
-        if (sercom_spi_transaction_done(inst->sercom_spi_desc_t,
+        if (sercom_spi_transaction_done(inst->spi_inst,
                 inst->currentTransactionId)) {
-            sercom_spi_clear_transaction(&spi_g, transactionId);
+            sercom_spi_clear_transaction(inst->spi_inst, inst->currentTransactionId);
             if (repeatedCMD == 0) {
-                sd_send_cmd(CMD55, 0x00000000, 0x65, inst->singleByteResponse, 1);
+                sd_send_cmd(CMD55, 0x00000000, 0x65, &inst->singleByteResponse, 1, inst);
                 repeatedCMD = 1;
                 inst->state = SD_CMD55_WAIT;
                 break;
@@ -335,24 +272,24 @@ void sd_card_service(struct sd_desc_t *inst)
                 inst->state = SD_FAILED;
                 break;
             }
-            sd_send_cmd(CMD59, 0x00000000, 0xFF, inst->singleByteResponse, 1);
+            sd_send_cmd(CMD59, 0x00000000, 0xFF, &inst->singleByteResponse, 1, inst);
             inst->state = SD_CMD59_WAIT;
         }
         break;
     case SD_CMD59_WAIT:
-        if (sercom_spi_transaction_done(inst->sercom_spi_desc_t,
+        if (sercom_spi_transaction_done(inst->spi_inst,
                 inst->currentTransactionId)) {
-            sercom_spi_clear_transaction(&spi_g, transactionId);
-            sd_send_cmd(CMD16, SD_BLOCKSIZE, 0xFF, inst->singleByteResponse, 1);
+            sercom_spi_clear_transaction(inst->spi_inst, inst->currentTransactionId);
+            sd_send_cmd(CMD16, SD_BLOCKSIZE, 0xFF, &inst->singleByteResponse, 1, inst);
             inst->state = SD_CMD16_WAIT;
         }
         break;
     case SD_CMD16_WAIT:
-        if (sercom_spi_transaction_done(inst->sercom_spi_desc_t,
+        if (sercom_spi_transaction_done(inst->spi_inst,
                 inst->currentTransactionId)) {
-            sercom_spi_clear_transaction(&spi_g, transactionId);
-            if (inst->singleByteResponse != R1_IDLE_STATE
-                    || inst->singleByteResponse != R1_ILLEGAL_COMMAND) {
+            sercom_spi_clear_transaction(inst->spi_inst, inst->currentTransactionId);
+            if (!( inst->singleByteResponse == R1_IDLE_STATE
+                    || inst->singleByteResponse == R1_ILLEGAL_COMMAND)) {
                 inst->state = SD_FAILED;
                 break;
             }
@@ -360,13 +297,13 @@ void sd_card_service(struct sd_desc_t *inst)
         }
         break;
     case SD_WRITE_WAIT:
-        if (sercom_spi_transaction_done(&spi_g, transactionId)) {
-            inst->state = READY;
+        if (sercom_spi_transaction_done(inst->spi_inst, inst->currentTransactionId)) {
+            inst->state = SD_READY;
         }
         break;
     case SD_READ_WAIT:
-        if (sercom_spi_transaction_done(&spi_g, transactionId)) {
-            inst->state = READY;
+        if (sercom_spi_transaction_done(inst->spi_inst, inst->currentTransactionId)) {
+            inst->state = SD_READY;
         }
         break;
     case SD_READY:

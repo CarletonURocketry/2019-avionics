@@ -134,10 +134,6 @@
 // SD Card block size
 #define SD_BLOCKSIZE 0x00000200
 
-// Actions
-#define SD_ACTION_WRITE 0x00
-#define SD_ACTION_READ 0x01
-
 enum sd_state {
     SD_INIT,
     SD_SPI_MODE_WAIT,
@@ -152,12 +148,12 @@ enum sd_state {
     SD_WRITE_WAIT,
     SD_READ_WAIT,
     SD_FAILED
-}
+};
 
 enum sd_action {
     SD_ACTION_WRITE,
     SD_ACTION_READ
-}
+};
 
 struct sd_desc_t {
     /** SPI instance used to communicate with device */
@@ -167,7 +163,7 @@ struct sd_desc_t {
     /** Data to write, or data from read **/
     /** 512 + 1 start byte + 2 crc bytes + 3 alignment bytes: **/
     /** 3 Unused Bytes | 0xFE | 512 Bytes of Data | 0xFF 0xFF **/
-    char data[518];
+    unsigned char data[518];
     /** Transaction ID of currently executing SPI transaction**/
     uint8_t currentTransactionId;
     /** Responses which also send back the argument (e.g. CMD8)**/
@@ -181,9 +177,9 @@ struct sd_desc_t {
     /** Current state of the SD card driver**/
     enum sd_state state;
     enum sd_action action;
-}
+};
 
 extern void init_sd_card(struct sd_desc_t *inst);
-extern void sd_card_service(struct sd_desc_t *inst, uint8_t *src, uint8_t action);
+extern void sd_card_service(struct sd_desc_t *inst);
 
 #endif
