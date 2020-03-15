@@ -106,20 +106,14 @@ void init_sercom_spi(struct sercom_spi_desc_t *descriptor,
     }
 }
 
-uint8_t sercom_spi_start(struct sercom_spi_desc_t *spi_inst,
-                         uint8_t *trans_id, uint32_t baudrate,
-                         uint8_t cs_pin_group, uint32_t cs_pin_mask,
-                         uint8_t *out_buffer, uint16_t out_length,
-                         uint8_t * in_buffer, uint16_t in_length)
+static inline void init_transaction(struct transaction_t *t, uint32_t baudrate,
+                                    uint8_t cs_pin_group, uint32_t cs_pin_mask,
+                                    uint8_t *out_buffer, uint16_t out_length,
+                                    uint8_t * in_buffer, uint16_t in_length,
+                                    uint8_t multi_part)
 {
-    struct transaction_t *t = transaction_queue_add(&spi_inst->queue);
-    if (t == NULL) {
-        return 1;
-    }
-    *trans_id = t->transaction_id;
-
     struct sercom_spi_transaction_t *state =
-                                (struct sercom_spi_transaction_t*)t->state;
+                                    (struct sercom_spi_transaction_t*)t->state;
 
     state->out_buffer = out_buffer;
     state->in_buffer = in_buffer;
@@ -129,13 +123,60 @@ uint8_t sercom_spi_start(struct sercom_spi_desc_t *spi_inst,
     state->cs_pin_group = cs_pin_group;
     state->cs_pin_mask = cs_pin_mask;
     state->rx_started = 0;
+    state->multi_part = multi_part;
 
     state->bytes_out = 0;
     state->bytes_in = 0;
 
-
     transaction_queue_set_valid(t);
+}
 
+uint8_t sercom_spi_start(struct sercom_spi_desc_t *spi_inst,
+                         uint8_t *trans_id, uint32_t baudrate,
+                         uint8_t cs_pin_group, uint32_t cs_pin_mask,
+                         uint8_t *out_buffer, uint16_t out_length,
+                         uint8_t * in_buffer, uint16_t in_length)
+{
+    // Try to get a transaction queue entry
+    struct transaction_t *t = transaction_queue_add(&spi_inst->queue);
+    if (t == NULL) {
+        return 1;
+    }
+
+    // Initialize the transaction state
+    init_transaction(t, baudrate, cs_pin_group, cs_pin_mask, out_buffer,
+                     out_length, in_buffer, in_length, 0);
+    *trans_id = t->transaction_id;
+
+    // Run the service to start a transaction if possible
+    sercom_spi_service(spi_inst);
+    return 0;
+}
+
+uint8_t sercom_spi_start_multi_part(struct sercom_spi_desc_t *spi_inst,
+                                    struct sercom_spi_transaction_part_t *parts,
+                                    uint8_t num_parts, uint8_t cs_pin_group,
+                                    uint32_t cs_pin_mask)
+{
+    // Try to get a transaction queue entry for each part
+    struct transaction_t *transactions[num_parts];
+    for (uint8_t i = 0; i < num_parts; i++) {
+        transactions[i] = transaction_queue_add(&spi_inst->queue);
+        if (transactions[i] == NULL) {
+            return 1;
+        }
+    }
+
+    // Initialize each transaction state
+    for (uint8_t i = 0; i < num_parts; i++) {
+        init_transaction(transactions[i], parts[i].baudrate, cs_pin_group,
+                         cs_pin_mask, parts[i].out_buffer, parts[i].out_length,
+                         parts[i].in_buffer, parts[i].in_length,
+                         i != (num_parts - 1));
+        parts[i].transaction_id = transactions[i]->transaction_id;
+    }
+
+    // Run the service to start a transaction if possible
     sercom_spi_service(spi_inst);
     return 0;
 }
@@ -238,8 +279,10 @@ static inline void sercom_spi_end_transaction (
     spi_inst->sercom->SPI.INTENCLR.reg = (SERCOM_SPI_INTENCLR_DRE |
                                           SERCOM_SPI_INTENCLR_RXC);
 
-    // Deassert the CS pin
-    PORT->Group[s->cs_pin_group].OUTSET.reg = s->cs_pin_mask;
+    // Deassert the CS pin if there are no futher parts to this transaction
+    if (!s->multi_part) {
+        PORT->Group[s->cs_pin_group].OUTSET.reg = s->cs_pin_mask;
+    }
 
     // Disable Receiver and SERCOM
     spi_inst->sercom->SPI.CTRLB.bit.RXEN = 0b0;
@@ -369,6 +412,7 @@ static void sercom_spi_dma_callback (uint8_t chan, void *state)
 
     struct sercom_spi_transaction_t *s =
                                     (struct sercom_spi_transaction_t*)t->state;
+
     if (spi_inst->tx_use_dma && (chan == spi_inst->tx_dma_chan) &&
                                 !s->rx_started) {
         // TX stage is complete

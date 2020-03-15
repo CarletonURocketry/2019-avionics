@@ -45,6 +45,9 @@ struct sercom_spi_transaction_t {
 
     /** Flag set if the receive stage has been initialized. */
     uint8_t rx_started:1;
+    /** Flag to indicate that there are further parts to follow within the same
+        transaction. */
+    uint8_t multi_part:1;
 };
 
 /**
@@ -78,6 +81,24 @@ struct sercom_spi_desc_t {
     /** Flag used to unsure that the service function is not executed in an
         interrupt while it is already being run in the main thread */
     uint8_t service_lock:1;
+};
+
+/**
+ * Structure which describes one stage of a multi-part SPI transaction.
+ */
+struct sercom_spi_transaction_part_t {
+    /** Buffer from which data will be sent */
+    uint8_t *out_buffer;
+    /** Buffer into which received data will be placed */
+    uint8_t * in_buffer;
+    /** Number of bytes to be sent */
+    uint16_t out_length;
+    /** Number of bytes to be received */
+    uint16_t in_length;
+    /** Baudrate */
+    uint32_t baudrate;
+    /** Transaction ID for this part of the transaction */
+    uint8_t transaction_id;
 };
 
 
@@ -121,6 +142,23 @@ extern uint8_t sercom_spi_start(struct sercom_spi_desc_t *spi_inst,
                                 uint8_t cs_pin_group, uint32_t cs_pin_mask,
                                 uint8_t *out_buffer, uint16_t out_length,
                                 uint8_t * in_buffer, uint16_t in_length);
+
+/**
+ *  Queue and SPI transaction that required multiple parts without raising the
+ *  CS line.
+ *
+ *  @param spi_inst The SPI instance to use
+ *  @param parts Pointer to an array of descriptors for the transaction stages,
+ *               the transaction_id field of each descriptor will be populated
+ *  @param num_parts The number of stages in the transaction
+ *  @param cs_pin_group The group index of the chip select pin of the
+ *                      peripheral.
+ *  @param cs_pin_mask The mask for the chip select pin of the peripheral.
+ */
+extern uint8_t sercom_spi_start_multi_part(struct sercom_spi_desc_t *spi_inst,
+                                    struct sercom_spi_transaction_part_t *parts,
+                                    uint8_t num_parts, uint8_t cs_pin_group,
+                                    uint32_t cs_pin_mask);
 
 /**
  *  Check if an SPI transaction in the queue is complete.
