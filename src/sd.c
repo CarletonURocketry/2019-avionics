@@ -104,8 +104,16 @@ static inline void write_block(struct sd_desc_t *inst)
     sercom_spi_clear_transaction(inst->spi_inst, inst->currentTransactionId);
 }
 
+/**
+ * read_block()
+ *
+ * @brief Read a single block from the SD card.
+ *
+ * @param sd_desc_t The instance of the sd card struct
+ */
 static inline void read_block(struct sd_desc_t *inst)
 {
+    // TODO: Implement this. See pg. 96 of spec + CMD17 (pg. 104)
     return;
 }
 
@@ -153,12 +161,9 @@ void init_sd_card(struct sd_desc_t *inst)
 /**
  * sd_card_service()
  *
- * @brief Checks the status of the SD card and writes a block of data if it is
- * ready.
+ * @brief Handles the different states of the SD card service.
  *
  * @param sd_desc_t The instance of the sd card struct
- *
- * TODO: Implement single block read function.
  */
 void sd_card_service(struct sd_desc_t *inst)
 {
