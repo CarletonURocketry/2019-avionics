@@ -144,9 +144,12 @@ enum sd_state {
     SD_ACMD41_WAIT,
     SD_CMD59_WAIT,
     SD_CMD16_WAIT,
+    SD_CMD24_WAIT,
     SD_READY,
     SD_WRITE_WAIT,
     SD_READ_WAIT,
+    SD_WRITE_FAILED,
+    SD_READ_FAILED,
     SD_FAILED
 };
 
